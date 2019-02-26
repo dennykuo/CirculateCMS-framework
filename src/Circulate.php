@@ -6,6 +6,7 @@ use Monolog\Logger;
 use Philo\Blade\Blade;
 use Symfony\Component\Finder\Finder;
 use Symfony\Component\HttpFoundation\Request;
+use JasonGrimes\Paginator;
 
 class Circulate
 {
@@ -106,6 +107,7 @@ class Circulate
             'cache_path'   => $this->env('CACHE_PATH', '_storage/cache'),
             'content_path' => $this->env('CONTENT_PATH', '_content'),
             'themes_path'  => $this->env('THEMES_PATH', 'public/themes'),
+            'pagination'   => $this->env('PAGINATION', 0),
         ];
     }
 
@@ -210,6 +212,10 @@ class Circulate
 
         if ($isCollectionIndex) {
             $data['collection'] = $this->getCollectionData($docOrCollection);
+
+            if ($this->settings['pagination']) {
+                $data['pagination'] = $this->getCollectionPagination($docOrCollection);
+            }
         }
 
         $blade = new Blade($this->viewsPath, $this->cachePath);
@@ -309,8 +315,15 @@ class Circulate
     protected function getCollectionData($collection)
     {
         $collectionData = [];
+        $entries = $collection->entries();
 
-        foreach ($collection->entries() as $doc) {
+        if ($this->settings['pagination']) {
+            $entriesPerPage = $this->settings['pagination'];
+            $currentPage = Request::createFromGlobals()->query->get('page');
+            $entries = array_slice($entries, $entriesPerPage * ($currentPage - 1), $entriesPerPage);
+        }
+
+        foreach ($entries as $doc) {
             list($meta, $html) = $doc->metaAndHtml();
             $meta['slug']      = $doc->slug();
 
@@ -318,5 +331,20 @@ class Circulate
         }
 
         return $collectionData;
+    }
+
+    /**
+     * Get collection pagination
+     *
+     * @return mixed
+     */
+    protected function getCollectionPagination($collection)
+    {
+        $totalItems = count($collection->entries());
+        $entriesPerPage = $this->settings['pagination'];
+        $currentPage = Request::createFromGlobals()->query->get('page');
+        $urlPattern = '?page=(:num)';
+
+        return new Paginator($totalItems, $entriesPerPage, $currentPage, $urlPattern);
     }
 }
